@@ -134,7 +134,7 @@ print(f'\nCompatibilità |l_fit - l_mis| / sqrt(sigma_fit^2 + sigma_mis^2) = {co
 
 """ GRAFICO """
 
-# Grafico fit e residui
+# Fit e residui
 fig, (ax_fit, ax_res) = plt.subplots(2, 1, sharex=True, gridspec_kw=dict(height_ratios=[3, 1]))
 
 # Fit

@@ -7,8 +7,14 @@ l2_asta = 1051 mm (lunghezza) (incertezza metro 1)
 
 A_asta = (16.05 x 1050.5) mm^2 = 16860.525 mm^2
 A_foro = (pi x (4.90/2)^2) mm^2 = (pi x (2.45)^2) mm^2 = 18.8574 mm^2
+n_fori = 10
+A_fori = n_fori x A_foro = (10 x 18.8574) mm^2 = 188.574 mm^2
 
-A_foro/A_asta = 18.8574/16860.525 mm^2 = 0.001118 < risoluzione calibro ventisemale => fori trascurabili => massa uniforme => centro di massa al centro dell'asta
+A_fori/A_asta = 188.574/16860.525 = 0.0112 ± 0.0002 (1.12% di area, volume e massa)
+
+I fori sono equidistanti ma spostati verso un lato: il loro punto medio dista s = 24 mm dal centro dell'asta (stima).
+
+Spostamento del centro di massa: delta = s x A_fori/A_asta = 24 mm x 0.0112 ≈ 0.3 mm < σ_d (0.5 mm e 1.2 mm) => fori trascurabili => centro di massa al centro dell'asta
 
 ### Centro di Massa
 
