@@ -1,3 +1,4 @@
+import os
 import numpy as np
 from matplotlib import pyplot as plt
 from scipy.optimize import curve_fit
@@ -71,7 +72,7 @@ sigma_T = np.array(sigma_t)
 
 parametri, covarianza = curve_fit(modello_periodo, d, t, p0=[L], sigma=sigma_T, absolute_sigma=True)
 
-l_fit = parametri[0] # trovo il valore del parametro libero che meglio approssima le misure 
+l_fit = parametri[0] # trovo il valore del parametro libero che meglio approssima le misure
 sigma_l = np.sqrt(covarianza[0, 0])
 
 residui = t - modello_periodo(d, l_fit)
@@ -82,7 +83,10 @@ compatibilita = abs(l_fit - L) / np.sqrt(sigma_l**2 + SIGMA_L**2)
 """ TABELLE """
 # Per ogni tabella stampo una versione leggibile a schermo e una pronta per LaTeX
 
-def stampa_tabella(titolo, intestazioni, righe, intestazioni_latex=None):
+# tutte le tabelle e i grafici in LaTeX finiscono qui e poi in materiale_analisi.tex
+materiale_latex = []
+
+def stampa_tabella(titolo, intestazioni, righe, intestazioni_latex=None, etichetta=None):
     larghezze = [max(len(str(x)) for x in col) for col in zip(intestazioni, *righe)]
     print(f'\n=== {titolo} ===')
     print('  '.join(str(h).rjust(w) for h, w in zip(intestazioni, larghezze)))
@@ -92,19 +96,37 @@ def stampa_tabella(titolo, intestazioni, righe, intestazioni_latex=None):
 
     # versione LaTeX: i valori "a ± b" diventano "$a \pm b$"
     def cella_latex(x):
-        x = str(x)
+        x = str(x).replace('%', r'\%')
         return f'${x.replace("±", r"\pm")}$' if '±' in x else x
 
     intestazioni_latex = intestazioni_latex or intestazioni
-    print('\n% LaTeX')
-    print('\\begin{tabular}{' + 'c' * len(intestazioni) + '}')
-    print('\\hline')
-    print(' & '.join(intestazioni_latex) + r' \\')
-    print('\\hline')
+    righe_latex = [
+        '\\begin{table}[H]',
+        '    \\centering',
+        '    \\begin{tabular}{' + '|'.join('c' * len(intestazioni)) + '}',
+        '      ' + ' & '.join(intestazioni_latex) + r' \\',
+        '      \\hline',
+    ]
     for r in righe:
-        print(' & '.join(cella_latex(x) for x in r) + r' \\')
-    print('\\hline')
-    print('\\end{tabular}')
+        righe_latex.append('      ' + ' & '.join(cella_latex(x) for x in r) + r' \\')
+    righe_latex += [
+        '    \\end{tabular}',
+        f'    \\caption{{{titolo.replace("±", r"$\pm$")}}}',
+    ]
+    if etichetta:
+        righe_latex.append(f'    \\label{{{etichetta}}}')
+    righe_latex.append('\\end{table}')
+    materiale_latex.append('\n'.join(righe_latex))
+
+def figura_latex(file, didascalia, etichetta, larghezza):
+    materiale_latex.append('\n'.join([
+        '\\begin{figure}[H]',
+        '    \\centering',
+        f'    \\includegraphics[width={larghezza}\\linewidth]{{{file}}}',
+        f'    \\caption{{{didascalia}}}',
+        f'    \\label{{{etichetta}}}',
+        '\\end{figure}',
+    ]))
 
 # 1) Misure singole per ogni d
 analizzati = [d1_analizzato, d2_analizzato, d3_analizzato, d4_analizzato, d5_analizzato]
@@ -113,29 +135,38 @@ for i, dati in enumerate(analizzati):
     for riga in dati:
         n, N, T_singolo = int(riga[0]), int(riga[2]), riga[3]
         righe.append([n, N, f'{T_singolo * N:.2f}', f'{T_singolo:.3f}'])
-    stampa_tabella(f'Misure d{i+1} = ({d[i]:.1f} ± {sigma_d[i]:.1f}) mm',
+    stampa_tabella(f'Misure d{i+1} = ({d[i]:.1f} ± {sigma_d[i]:.1f}) mm'.replace(f'd{i+1}', f'$d_{i+1}$'),
                    ['#', 'N', 'N*T [s]', 'T [s]'], righe,
-                   ['\\#', '$N$', '$NT$ [s]', '$T$ [s]'])
+                   ['\\#', '$N$', '$NT$ [s]', '$T$ [s]'], f'tab:misure_d{i+1}')
 
 # 2) Riepilogo: valori medi, errori e residui
 righe = []
 for i in range(len(d)):
     righe.append([f'd{i+1}', f'{d[i]:.1f} ± {sigma_d[i]:.1f}', f'{t[i]:.4f} ± {sigma_T[i]:.4f}',
-                  f'{residui[i] * 1000:+.1f}'])
+                  f'{residui[i] * 1000:+.1f} ± {sigma_T[i] * 1000:.1f}'])
 stampa_tabella('Riepilogo', ['', 'd [mm]', 'T [s]', 'residuo [ms]'], righe,
-               ['', '$d$ [mm]', '$T$ [s]', 'residuo [ms]'])
+               ['', '$d$ [mm]', '$T$ [s]', 'residuo [ms]'], 'tab:riepilogo')
 
 # 3) Risultato del fit e confronto con la misura diretta
 stampa_tabella('Confronto lunghezza asta', ['', 'l [mm]'],
                [['best-fit', f'{l_fit:.1f} ± {sigma_l:.1f}'],
                 ['misurata', f'{L:.1f} ± {SIGMA_L:.1f}']],
-               ['', '$l$ [mm]'])
+               ['', '$l$ [mm]'], 'tab:confronto_l')
 print(f'\nCompatibilità |l_fit - l_mis| / sqrt(sigma_fit^2 + sigma_mis^2) = {compatibilita:.2f} sigma')
+
+# Effetto sistematico dell'ampiezza finita: T_mis = T0 (1 + theta^2/16)
+righe = []
+for theta_gradi in [8, 12, 16]:
+    k = 1 + np.radians(theta_gradi)**2 / 16
+    p_amp, _ = curve_fit(modello_periodo, d, t / k, p0=[L], sigma=sigma_T / k, absolute_sigma=True)
+    righe.append([f'{theta_gradi}°', f'{(k-1)*100:.2f}%', f'{p_amp[0]:.1f}'])
+stampa_tabella('Correzione per ampiezza finita', ['theta_eff', 'correzione', 'l [mm]'], righe,
+               [r'$\theta_{\mathrm{eff}}$', 'correzione relativa', r'$\hat{l}$ (mm)'], 'tab:ampiezza')
 
 """ GRAFICO """
 
 # Fit e residui
-fig, (ax_fit, ax_res) = plt.subplots(2, 1, sharex=True, gridspec_kw=dict(height_ratios=[3, 1]))
+fig, (ax_fit, ax_res) = plt.subplots(2, 1, sharex=True, figsize=(8, 6), gridspec_kw=dict(height_ratios=[3, 1]))
 
 # Fit
 d_grid = np.linspace(0.8 * d.min(), 1.05 * d.max(), 500)
@@ -147,26 +178,47 @@ ax_fit.plot(d_grid, modello_periodo(d_grid, l_fit), color='black', label=f'Fit: 
 ax_fit.plot(d_grid, modello_periodo(d_grid, L), color='grey', ls='--', label=f'Modello con l misurata = {L:.0f} ± {SIGMA_L:.0f} mm')
 ax_fit.set_title('T in funzione di d')
 ax_fit.set_ylabel('T [s]')
-ax_fit.legend()
+ax_fit.legend(fontsize=9)
 
 # Residui
 for i in range(len(d)):
-    ax_res.errorbar(d[i], residui[i], yerr=sigma_T[i], fmt='x', color=colori[i])
+    ax_res.errorbar(d[i], residui[i] * 1000, yerr=sigma_T[i] * 1000, fmt='x', color=colori[i])
 ax_res.axhline(0, color='black')
 ax_res.set_xlabel('d [mm]')
-ax_res.set_ylabel('Residui [s]')
+ax_res.set_ylabel('Residui [ms]')
 
 # Dispersione delle misure: scarto di ogni T dalla media del suo gruppo
-fig_disp, ax_disp = plt.subplots()
+fig_disp, ax_disp = plt.subplots(figsize=(8, 4.2))
 
 for i, dati in enumerate(analizzati):
     scarti = (dati[:, 3] - t[i]) * 1000 # in ms
     ax_disp.plot(np.full(len(scarti), i), scarti,'o', color=colori[i], alpha=0.6, markersize=5)
     ax_disp.errorbar(i, 0, yerr=sigma_T[i] * 1000, fmt='_', color='black', capsize=6, markersize=20)
 ax_disp.axhline(0, color='grey', lw=0.8)
-ax_disp.set_xticks(range(len(d)), [f'$d_{i+1}$ = {d[i]:.1f} mm' for i in range(len(d))], rotation=20)
+ax_disp.set_xticks(range(len(d)), [f'$d_{i+1}$ = {d[i]:.1f} mm' for i in range(len(d))])
 ax_disp.set_ylabel(r'$T_i - \bar{T}$ [ms]')
-ax_disp.set_title(r'Dispersione delle misure di T (barra nera = $\sigma_T$ della media)')
+ax_disp.set_title('Dispersione delle misure di T')
 fig_disp.tight_layout()
+
+fig.tight_layout()
+
+# Salvataggio dei grafici nella cartella grafici/
+os.makedirs('grafici', exist_ok=True)
+fig.savefig('grafici/fit_periodo.png', dpi=200, bbox_inches='tight')
+fig_disp.savefig('grafici/disperione_periodo.png', dpi=200, bbox_inches='tight')
+
+figura_latex('grafici/disperione_periodo.png',
+             r"Scarto di ciascuna misura del periodo dalla media del proprio gruppo. Le barre nere indicano l'incertezza $\sigma_T$ sul periodo medio.",
+             'fig:dispersione', 0.9)
+figura_latex('grafici/fit_periodo.png',
+             r"In alto: periodo in funzione della distanza $d$, con la curva di best-fit (linea continua) e il modello calcolato con la lunghezza misurata dell'asta (linea tratteggiata). In basso: residui del fit.",
+             'fig:fit_periodo', 0.8)
+
+# Scrittura di tutte le tabelle e figure in materiale_analisi.tex
+with open('materiale_analisi.tex', 'w', encoding='utf-8') as f:
+    f.write('% File generato da main.py: tabelle e grafici per la relazione\n')
+    f.write('% Richiede \\usepackage{float} e \\usepackage{graphicx}\n\n')
+    f.write('\n\n'.join(materiale_latex) + '\n')
+print('\nTabelle e grafici LaTeX salvati in materiale_analisi.tex')
 
 plt.show()
